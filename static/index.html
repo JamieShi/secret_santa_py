@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Secret Santa 抽签</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 16px;
+        background: #f5f5f5;
+      }
+
+      h1 {
+        font-size: 1.4rem;
+        text-align: center;
+        margin-bottom: 16px;
+      }
+
+      .card {
+        background: #ffffff;
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        margin-bottom: 16px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+      }
+
+      select,
+      button {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        font-size: 1rem;
+        margin-bottom: 12px;
+        box-sizing: border-box;
+      }
+
+      button {
+        border: none;
+        background: #0084ff;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        background: #b0b0b0;
+        cursor: not-allowed;
+      }
+
+      .message {
+        margin-top: 8px;
+        font-size: 0.95rem;
+      }
+
+      .message.error {
+        color: #d32f2f;
+      }
+
+      .message.success {
+        color: #2e7d32;
+      }
+
+      .status-list {
+        list-style: none;
+        padding-left: 0;
+        margin: 0;
+      }
+
+      .status-list li {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        border-bottom: 1px solid #eee;
+        font-size: 0.95rem;
+      }
+
+      .status-list li:last-child {
+        border-bottom: none;
+      }
+
+      .status-tag {
+        font-size: 0.85rem;
+      }
+
+      .done {
+        color: #2e7d32;
+      }
+
+      .pending {
+        color: #f57c00;
+      }
+
+      .hint {
+        font-size: 0.85rem;
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Secret Santa 抽签</h1>
+
+    <div class="card">
+      <label for="nameSelect">1️⃣ 请选择你的名字</label>
+      <select id="nameSelect">
+        <option value="">-- 请选择 --</option>
+        <option value="Jamie">Jamie</option>
+        <option value="Emily">Emily</option>
+        <option value="Xiwei">Xiwei</option>
+        <option value="Yujia">Yujia</option>
+        <option value="Ruolan">Ruolan</option>
+      </select>
+
+      <button id="drawButton">2️⃣ 开始抽签</button>
+
+      <div id="result" class="message"></div>
+      <div class="hint">
+        ⚠️ 抽签只有一次机会，抽完不能更改，请确认你选的是自己的名字。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1.1rem; margin-top:0;">当前抽签进度</h2>
+      <ul id="statusList" class="status-list"></ul>
+      <div class="hint">大家都可以看到谁已经抽签，但看不到抽到谁。</div>
+    </div>
+
+    <script>
+      const nameSelect = document.getElementById("nameSelect");
+      const drawButton = document.getElementById("drawButton");
+      const resultDiv = document.getElementById("result");
+      const statusList = document.getElementById("statusList");
+
+      async function fetchState() {
+        try {
+          const res = await fetch("/api/state");
+          if (!res.ok) {
+            throw new Error("无法获取状态");
+          }
+          const data = await res.json();
+          renderStatus(data.participants || []);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      function renderStatus(participants) {
+        statusList.innerHTML = "";
+        participants.forEach((p) => {
+          const li = document.createElement("li");
+          const nameSpan = document.createElement("span");
+          nameSpan.textContent = p.name;
+
+          const statusSpan = document.createElement("span");
+          statusSpan.classList.add("status-tag");
+          if (p.hasDrawn) {
+            statusSpan.textContent = "✅ 已抽";
+            statusSpan.classList.add("done");
+          } else {
+            statusSpan.textContent = "⏳ 未抽";
+            statusSpan.classList.add("pending");
+          }
+
+          li.appendChild(nameSpan);
+          li.appendChild(statusSpan);
+          statusList.appendChild(li);
+        });
+      }
+
+      async function drawSecretSanta() {
+        const name = nameSelect.value;
+        resultDiv.textContent = "";
+        resultDiv.className = "message";
+
+        if (!name) {
+          resultDiv.textContent = "请先选择你的名字。";
+          resultDiv.classList.add("error");
+          return;
+        }
+
+        drawButton.disabled = true;
+
+        try {
+          const res = await fetch("/api/draw", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(data.error || "抽签失败");
+          }
+
+          resultDiv.textContent = `🎁 你抽到的是：${data.recipient}。请保密哦！`;
+          resultDiv.classList.add("success");
+
+          // 抽签成功后刷新状态列表
+          fetchState();
+        } catch (err) {
+          resultDiv.textContent = err.message;
+          resultDiv.classList.add("error");
+
+          // 如果不是“已经抽过了”，允许再点一次
+          if (!/已经抽过/.test(err.message)) {
+            drawButton.disabled = false;
+          }
+        }
+      }
+
+      drawButton.addEventListener("click", drawSecretSanta);
+
+      // 页面加载时获取一次状态
+      fetchState();
+
+      // 每 10 秒刷新一次状态，让进度更实时
+      setInterval(fetchState, 10000);
+    </script>
+  </body>
+</html>
