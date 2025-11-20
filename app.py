@@ -1,11 +1,10 @@
 # app.py
-from flask import Flask, request, jsonify
 import random
+import os
+from flask import Flask, request, jsonify, send_from_directory
 
 # 创建 Flask 应用
-# static_folder="static"：指定静态文件目录
-# static_url_path=""：让 http://localhost:5000/ 直接访问 static/index.html
-app = Flask(__name__, static_folder="static", static_url_path="")
+app = Flask(__name__, static_folder="static")
 
 # 固定的参与者名单
 participant_names = ["Jamie", "Emily", "Xiwei", "Yujia", "Ruolan"]
@@ -55,7 +54,7 @@ def ensure_mapping_initialized():
 @app.route("/")
 def index():
     """返回前端页面（static/index.html）"""
-    return app.send_static_file("index.html")
+    return send_from_directory("static", "index.html")
 
 
 @app.get("/api/state")
@@ -105,11 +104,12 @@ def reset():
     调用后所有人变为未抽签，重新生成配对表
     """
     global participants, secret_mapping
-    participants = [{"name": name, "hasDrawn": False} for name in participant_names]
+    participants[:] = [{"name": name, "hasDrawn": False} for name in participant_names]
     secret_mapping = None
     return jsonify({"message": "已重置 Secret Santa 状态"})
 
 
 if __name__ == "__main__":
-    from flask import Flask
-    app.run(host="0.0.0.0", port=5000)
+    # 本地运行时使用环境变量 PORT（云平台一般会注入），没有就默认 5000
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
